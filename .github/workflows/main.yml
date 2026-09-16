@@ -1,4 +1,4 @@
-name: Compila APK Linea Verde
+name: Compila APK Linea Verde Corretto
 
 on:
   push:
@@ -10,30 +10,182 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Crea Struttura Progetto Android Completa
+      run: |
+        mkdir -p app/src/main/java/com/example/lineaverde
+        mkdir -p app/src/main/res/layout
+        mkdir -p gradle/wrapper
 
-    - name: Configura Java 17
+    - name: Crea build.gradle del Progetto
+      run: |
+        cat << 'EOF' > build.gradle
+        buildscript {
+            repositories { google(); mavenCentral() }
+            dependencies { classpath 'com.android.tools.build:gradle:8.2.2'; classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22" }
+        }
+        allprojects { repositories { google(); mavenCentral() } }
+        EOF
+
+    - name: Crea settings.gradle
+      run: echo "include ':app'" > settings.gradle
+
+    - name: Crea build.gradle dell'App
+      run: |
+        cat << 'EOF' > app/build.gradle
+        plugins {
+            id 'com.android.application'
+            id 'kotlin-android'
+        }
+        android {
+            namespace 'com.example.lineaverde'
+            compileSdk 34
+            defaultConfig {
+                applicationId "com.example.lineaverde"
+                minSdk 26
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+            }
+            buildTypes {
+                release {
+                    minifyEnabled false
+                }
+            }
+        }
+        dependencies {
+            implementation 'androidx.core:core-ktx:1.12.0'
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+            implementation 'com.google.android.material:material:1.11.0'
+        }
+        EOF
+
+    - name: Crea AndroidManifest con Permessi Overlay
+      run: |
+        cat << 'EOF' > app/src/main/AndroidManifest.xml
+        <manifest xmlns:android="http://android.com">
+            <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+            <application
+                android:allowBackup="true"
+                android:label="Green Line Overlay"
+                android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+                <activity android:name=".MainActivity" android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                </activity>
+                <service android:name=".OverlayService" android:exported="false" />
+            </application>
+        </manifest>
+        EOF
+
+    - name: Crea Interfaccia Grafica Layout
+      run: |
+        cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+        <LinearLayout xmlns:android="http://android.com"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="20dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Schermo Rotto - Controllo Linea"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="30dp"/>
+            <Button
+                android:id="@+id/btnStart"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ATTIVA LINEA VERDE"/>
+        </LinearLayout>
+        EOF
+
+    - name: Crea Codice Logica Kotlin (MainActivity e OverlayService)
+      run: |
+        cat << 'EOF' > app/src/main/java/com/example/lineaverde/MainActivity.kt
+        package com.example.lineaverde
+
+        import android.content.Context
+        import android.content.Intent
+        import android.graphics.Color
+        import android.graphics.PixelFormat
+        import android.net.Uri
+        import android.os.Bundle
+        import android.provider.Settings
+        import android.view.View
+        import android.view.WindowManager
+        import android.widget.Button
+        import android.widget.Toast
+        import androidx.appcompat.app.AppCompatActivity
+        import android.app.Service
+        import android.os.IBinder
+
+        class MainActivity : AppCompatActivity() {
+            override fun onCreate(savedInstanceState: Bundle?) {
+                super.onCreate(savedInstanceState)
+                setContentView(R.layout.activity_main)
+
+                val btnStart = findViewById<Button>(R.id.btnStart)
+                btnStart.setOnClickListener {
+                    if (!Settings.canDrawOverlays(this)) {
+                        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                        startActivityForResult(intent, 123)
+                        Toast.makeText(this, "Attiva l'autorizzazione per continuare!", Toast.LENGTH_LONG).show()
+                    } else {
+                        startService(Intent(this, OverlayService::class.java))
+                        finish()
+                    }
+                }
+            }
+        }
+
+        class OverlayService : Service() {
+            private var wm: WindowManager? = null
+            private var lineView: View? = null
+            override fun onBind(intent: Intent?): IBinder? = null
+
+            override fun onCreate() {
+                super.onCreate()
+                wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                lineView = View(this).apply { setBackgroundColor(Color.parseColor("#00FF00")) }
+                val params = WindowManager.LayoutParams(
+                    15, WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    PixelFormat.TRANSLUCENT
+                )
+                params.x = 250
+                params.y = 0
+                wm?.addView(lineView, params)
+            }
+
+            override fun onDestroy() {
+                super.onDestroy()
+                if (lineView != null) wm?.removeView(lineView)
+            }
+        }
+        EOF
+
+    - name: Configura Ambiente Android Termurin Java 17
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Estrai il progetto ZIP
+    - name: Scarica file Gradle Wrapper di sicurezza
       run: |
-        sudo apt-get install -y unzip
-        unzip green-overlay-android-kotlin.zip -d progetto_estratto
-        # Sposta i file nella cartella principale se l'estrazione ha creato una sottocartella
-        cp -r progetto_estratto/*/* . || cp -r progetto_estratto/* . || true
+        wget https://gradle.org
+        sudo apt-get install -y gradle
+        gradle wrapper --gradle-version 8.4
 
-    - name: Dai i permessi a Gradle
-      run: chmod +x gradlew
-      continue-on-error: true
+    - name: Compila APK Finale Garantito
+      run: ./gradlew assembleDebug
 
-    - name: Compila APK di Debug
-      run: ./gradlew assembleDebug || gradle assembleDebug
-
-    - name: Carica l'APK pronto
+    - name: Carica l'APK Pronto da Installare
       uses: actions/upload-artifact@v4
       with:
-        name: App-Linea-Verde-Installabile
-        path: "**/build/outputs/apk/debug/*.apk"
+        name: App-Linea-Verde-Funzionante
+        path: app/build/outputs/apk/debug/*.apk
