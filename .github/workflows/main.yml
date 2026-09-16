@@ -1,4 +1,4 @@
-name: Compila APK Linea Verde Corretto
+name: Compila APK Linea Verde Diretto
 
 on:
   push:
@@ -55,7 +55,6 @@ jobs:
         dependencies {
             implementation 'androidx.core:core-ktx:1.12.0'
             implementation 'androidx.appcompat:appcompat:1.6.1'
-            implementation 'com.google.android.material:material:1.11.0'
         }
         EOF
 
@@ -88,13 +87,6 @@ jobs:
             android:orientation="vertical"
             android:gravity="center"
             android:padding="20dp">
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Schermo Rotto - Controllo Linea"
-                android:textSize="20sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="30dp"/>
             <Button
                 android:id="@+id/btnStart"
                 android:layout_width="match_parent"
@@ -127,13 +119,11 @@ jobs:
             override fun onCreate(savedInstanceState: Bundle?) {
                 super.onCreate(savedInstanceState)
                 setContentView(R.layout.activity_main)
-
                 val btnStart = findViewById<Button>(R.id.btnStart)
                 btnStart.setOnClickListener {
                     if (!Settings.canDrawOverlays(this)) {
                         val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-                        startActivityForResult(intent, 123)
-                        Toast.makeText(this, "Attiva l'autorizzazione per continuare!", Toast.LENGTH_LONG).show()
+                        startActivity(intent)
                     } else {
                         startService(Intent(this, OverlayService::class.java))
                         finish()
@@ -146,7 +136,6 @@ jobs:
             private var wm: WindowManager? = null
             private var lineView: View? = null
             override fun onBind(intent: Intent?): IBinder? = null
-
             override fun onCreate() {
                 super.onCreate()
                 wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -157,11 +146,10 @@ jobs:
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                     PixelFormat.TRANSLUCENT
                 )
-                params.x = 250
+                params.x = 200
                 params.y = 0
                 wm?.addView(lineView, params)
             }
-
             override fun onDestroy() {
                 super.onDestroy()
                 if (lineView != null) wm?.removeView(lineView)
@@ -175,17 +163,17 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Scarica file Gradle Wrapper di sicurezza
+    - name: Scarica ed esegui i file di compilazione Gradle wrapper
       run: |
         wget https://gradle.org
         sudo apt-get install -y gradle
         gradle wrapper --gradle-version 8.4
 
-    - name: Compila APK Finale Garantito
+    - name: Compila APK Finale Pulito
       run: ./gradlew assembleDebug
 
     - name: Carica l'APK Pronto da Installare
       uses: actions/upload-artifact@v4
       with:
-        name: App-Linea-Verde-Funzionante
+        name: App-Linea-Verde-Installabile
         path: app/build/outputs/apk/debug/*.apk
