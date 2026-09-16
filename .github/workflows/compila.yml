@@ -1,4 +1,4 @@
-name: Compila APK Corretto
+name: Compila APK Linea Verde
 
 on:
   push:
@@ -20,9 +20,19 @@ jobs:
       run: |
         mkdir -p app/src/main/java/com/example/lineaverde
         mkdir -p app/src/main/res/layout
+        mkdir -p gradle/wrapper
         
         # settings.gradle
         echo "include ':app'" > settings.gradle
+        
+        # gradle-wrapper.properties (Configurazione nativa!)
+        cat << 'EOF' > gradle/wrapper/gradle-wrapper.properties
+        distributionBase=GRADLE_USER_HOME
+        distributionPath=wrapper/dists
+        distributionUrl=https\://services.gradle.org/distributions/gradle-8.4-bin.zip
+        zipStoreBase=GRADLE_USER_HOME
+        zipStorePath=wrapper/dists
+        EOF
         
         # build.gradle del Progetto
         cat << 'EOF' > build.gradle
@@ -146,14 +156,11 @@ jobs:
         }
         EOF
 
-    - name: Scarica ed Installa Gradle 8.4 Ufficiale
-      run: |
-        wget https://gradle.org
-        sudo unzip -d /opt/gradle gradle-8.4-bin.zip
-        echo "/opt/gradle/gradle-8.4/bin" >> $GITHUB_PATH
+    - name: Configura ed Esegui Gradle Automatizzato
+      uses: gradle/actions/setup-gradle@v4
 
     - name: Compila APK Eseguibile
-      run: gradle assembleDebug
+      run: chmod +x gradlew && ./gradlew assembleDebug
 
     - name: Carica l'APK Pronto da Installare
       uses: actions/upload-artifact@v4
