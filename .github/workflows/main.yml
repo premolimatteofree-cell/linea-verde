@@ -162,18 +162,21 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: '17'
+        
+    - name: Configura Gradle Ufficiale
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+        cache: 'gradle'
 
-    - name: Scarica ed esegui i file di compilazione Gradle wrapper
+    - name: Compila APK Finale Senza Wrapper
       run: |
-        wget https://gradle.org
         sudo apt-get install -y gradle
-        gradle wrapper --gradle-version 8.4
-
-    - name: Compila APK Finale Pulito
-      run: ./gradlew assembleDebug
+        gradle assembleDebug
 
     - name: Carica l'APK Pronto da Installare
       uses: actions/upload-artifact@v4
       with:
         name: App-Linea-Verde-Installabile
-        path: app/build/outputs/apk/debug/*.apk
+        path: "**/build/outputs/apk/debug/*.apk"
