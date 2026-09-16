@@ -1,3 +1,151 @@
+name: Compila APK Corretto
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Configura Ambiente Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Crea Progetto Android da Zero
+      run: |
+        mkdir -p app/src/main/java/com/example/lineaverde
+        mkdir -p app/src/main/res/layout
+        
+        # settings.gradle
+        echo "include ':app'" > settings.gradle
+        
+        # build.gradle del Progetto
+        cat << 'EOF' > build.gradle
+        buildscript {
+            repositories { google(); mavenCentral() }
+            dependencies { classpath 'com.android.tools.build:gradle:8.2.2'; classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22" }
+        }
+        allprojects { repositories { google(); mavenCentral() } }
+        EOF
+        
+        # build.gradle dell'App
+        cat << 'EOF' > app/build.gradle
+        plugins {
+            id 'com.android.application'
+            id 'kotlin-android'
+        }
+        android {
+            namespace 'com.example.lineaverde'
+            compileSdk 34
+            defaultConfig {
+                applicationId "com.example.lineaverde"
+                minSdk 26
+                targetSdk 34
+                versionCode 1
+                versionName "1.0"
+            }
+        }
+        dependencies {
+            implementation 'androidx.core:core-ktx:1.12.0'
+            implementation 'androidx.appcompat:appcompat:1.6.1'
+        }
+        EOF
+        
+        # AndroidManifest.xml
+        cat << 'EOF' > app/src/main/AndroidManifest.xml
+        <manifest xmlns:android="http://android.com">
+            <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+            <application
+                android:label="Green Line Overlay"
+                android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+                <activity android:name=".MainActivity" android:exported="true">
+                    <intent-filter>
+                        <action android:name="android.intent.action.MAIN" />
+                        <category android:name="android.intent.category.LAUNCHER" />
+                    </intent-filter>
+                </activity>
+                <service android:name=".OverlayService" android:exported="false" />
+            </application>
+        </manifest>
+        EOF
+        
+        # activity_main.xml Layout
+        cat << 'EOF' > app/src/main/res/layout/activity_main.xml
+        <LinearLayout xmlns:android="http://android.com"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:padding="20dp">
+            <Button
+                android:id="@+id/btnStart"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="ATTIVA LINEA VERDE"/>
+        </LinearLayout>
+        EOF
+        
+        # MainActivity.kt e OverlayService.kt
+        cat << 'EOF' > app/src/main/java/com/example/lineaverde/MainActivity.kt
+        package com.example.lineaverde
+        import android.content.Context
+        import android.content.Intent
+        import android.graphics.Color
+        import android.graphics.PixelFormat
+        import android.net.Uri
+        import android.os.Bundle
+        import android.provider.Settings
+        import android.view.View
+        import android.view.WindowManager
+        import android.widget.Button
+        import androidx.appcompat.app.AppCompatActivity
+        import android.app.Service
+        import android.os.IBinder
+
+        class MainActivity : AppCompatActivity() {
+            override fun onCreate(savedInstanceState: Bundle?) {
+                super.onCreate(savedInstanceState)
+                setContentView(R.layout.activity_main)
+                findViewById<Button>(R.id.btnStart).setOnClickListener {
+                    if (!Settings.canDrawOverlays(this)) {
+                        startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                    } else {
+                        startService(Intent(this, OverlayService::class.java))
+                        finish()
+                    }
+                }
+            }
+        }
+
+        class OverlayService : Service() {
+            private var wm: WindowManager? = null
+            private var lineView: View? = null
+            override fun onBind(intent: Intent?): IBinder? = null
+            override fun onCreate() {
+                super.onCreate()
+                wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                lineView = View(this).apply { setBackgroundColor(Color.parseColor("#00FF00")) }
+                val params = WindowManager.LayoutParams(
+                    15, WindowManager.LayoutParams.MATCH_PARENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    PixelFormat.TRANSLUCENT
+                )
+                params.x = 200
+                params.y = 0
+                wm?.addView(lineView, params)
+            }
+            override fun onDestroy() {
+                super.onDestroy()
+                if (lineView != null) wm?.removeView(lineView)
+            }
+        }
+        EOF
+
     - name: Scarica ed Installa Gradle 8.4 Ufficiale
       run: |
         wget https://gradle.org
